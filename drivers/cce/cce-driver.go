@@ -11,16 +11,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fyery-chen/cce-sdk/signer"
-	"github.com/fyery-chen/cce-sdk/common"
-	"github.com/rancher/kontainer-engine/types"
-	"github.com/sirupsen/logrus"
 	"crypto/tls"
 	"encoding/base64"
+	"github.com/fyery-chen/cce-sdk/common"
+	"github.com/fyery-chen/cce-sdk/signer"
 	"github.com/rancher/kontainer-engine/drivers/util"
+	"github.com/rancher/kontainer-engine/types"
+	"github.com/sirupsen/logrus"
+	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"os"
 )
 
@@ -29,40 +29,39 @@ type Driver struct {
 	types.UnimplementedVersionAccess
 
 	driverCapabilities types.Capabilities
-
 }
 
 type state struct {
-	ClusterName   	string
-	DisplayName   	string
-	Description     string
-	ProjectID     	string
-	Zone            string
-	ClusterType   	string
-	ClusterFlavor 	string
-	ClusterVersion 	string
-	ClusterBillingMode int64
-	ClusterLabels   map[string]string
-	ClientID      	string
-	ClientSecret  	string
-	ContainerNetworkMode string
-	ContainerNetworkCidr string
-	VpcID         	string
-	SubnetID      	string
-	HighwaySubnet 	string
+	ClusterName           string
+	DisplayName           string
+	Description           string
+	ProjectID             string
+	Zone                  string
+	ClusterType           string
+	ClusterFlavor         string
+	ClusterVersion        string
+	ClusterBillingMode    int64
+	ClusterLabels         map[string]string
+	ClientID              string
+	ClientSecret          string
+	ContainerNetworkMode  string
+	ContainerNetworkCidr  string
+	VpcID                 string
+	SubnetID              string
+	HighwaySubnet         string
 	AuthenticatingProxyCa string
-	ClusterID       string
+	ClusterID             string
 	ExternalServerEnabled bool
-	ClusterEipId    string
-	ClusterJobId    string
-	NodeConfig      *common.NodeConfig
+	ClusterEipId          string
+	ClusterJobId          string
+	NodeConfig            *common.NodeConfig
 
 	ClusterInfo types.ClusterInfo
 }
 
 const (
-	retries = 5
-	pollInterval = 30
+	retries          = 5
+	pollInterval     = 30
 	defaultNamespace = "cattle-system"
 )
 
@@ -221,6 +220,14 @@ func (d *Driver) GetDriverCreateOptions(ctx context.Context) (*types.DriverFlags
 		Usage: "If the period is auto renew",
 		Value: "false",
 	}
+	driverFlag.Options["user-name"] = &types.Flag{
+		Type:  types.StringType,
+		Usage: "user name to log in the host",
+	}
+	driverFlag.Options["password"] = &types.Flag{
+		Type:  types.StringType,
+		Usage: "password to log in the host",
+	}
 	driverFlag.Options["external-server-enabled"] = &types.Flag{
 		Type:  types.BoolType,
 		Usage: "To enable cluster elastic IP",
@@ -303,7 +310,7 @@ func getStateFromOptions(driverOptions *types.DriverOptions) (state, error) {
 	state.HighwaySubnet = getValueFromDriverOptions(driverOptions, types.StringType, "highway-subnet", "highwaySubnet").(string)
 	state.NodeConfig.NodeFlavor = getValueFromDriverOptions(driverOptions, types.StringType, "node-flavor", "nodeFlavor").(string)
 	state.NodeConfig.AvailableZone = getValueFromDriverOptions(driverOptions, types.StringType, "available-zone", "availableZone").(string)
-	state.NodeConfig.SSHName = getValueFromDriverOptions(driverOptions, types.StringType, "ssh-key","sshKey").(string)
+	state.NodeConfig.SSHName = getValueFromDriverOptions(driverOptions, types.StringType, "ssh-key", "sshKey").(string)
 	state.NodeConfig.RootVolumeSize = getValueFromDriverOptions(driverOptions, types.IntType, "root-volume-size", "rootVolumeSize").(int64)
 	state.NodeConfig.RootVolumeType = getValueFromDriverOptions(driverOptions, types.StringType, "root-volume-type", "rootVolumeType").(string)
 	state.NodeConfig.DataVolumeSize = getValueFromDriverOptions(driverOptions, types.IntType, "data-volume-size", "dataVolumeSize").(int64)
@@ -319,6 +326,8 @@ func getStateFromOptions(driverOptions *types.DriverOptions) (state, error) {
 	state.NodeConfig.ExtendParam.BMSPeriodType = getValueFromDriverOptions(driverOptions, types.StringType, "bms-period-type", "bmsPeriodType").(string)
 	state.NodeConfig.ExtendParam.BMSPeriodNum = getValueFromDriverOptions(driverOptions, types.IntType, "bms-period-num", "bmsPeriodNum").(int64)
 	state.NodeConfig.ExtendParam.BMSIsAutoRenew = getValueFromDriverOptions(driverOptions, types.StringType, "bms-is-auto-renew", "bmsIsAutoRenew").(string)
+	state.NodeConfig.UserPassword.UserName = getValueFromDriverOptions(driverOptions, types.StringType, "user-name", "userName").(string)
+	state.NodeConfig.UserPassword.Password = getValueFromDriverOptions(driverOptions, types.StringType, "password").(string)
 	state.AuthenticatingProxyCa = getValueFromDriverOptions(driverOptions, types.StringType, "authenticating-proxy-ca", "authenticatingProxyCa").(string)
 	state.ExternalServerEnabled = getValueFromDriverOptions(driverOptions, types.BoolType, "external-server-enabled", "externalServerEnabled").(bool)
 	state.ClusterEipId = getValueFromDriverOptions(driverOptions, types.StringType, "cluster-eip-id", "clusterEipId").(string)
@@ -359,10 +368,10 @@ func getStateFromOptions(driverOptions *types.DriverOptions) (state, error) {
 			state.NodeConfig.NodeLabels[kv[0]] = kv[1]
 		}
 	}
-	clusterLabels := getValueFromDriverOptions(driverOptions, types.StringSliceType,"labels").(*types.StringSlice)
+	clusterLabels := getValueFromDriverOptions(driverOptions, types.StringSliceType, "labels").(*types.StringSlice)
 	for _, clusterLabel := range clusterLabels.Value {
 		kv := strings.Split(clusterLabel, "=")
-		if len(kv) ==  2 {
+		if len(kv) == 2 {
 			state.ClusterLabels[kv[0]] = kv[1]
 		}
 	}
@@ -520,9 +529,9 @@ func (d *Driver) cceHTTPRequest(state state, uri, method, serviceType string, ar
 	return body, statusCode, nil
 }
 
-func (d *Driver) addNode(ctx context.Context, state state, num int64)(error) {
+func (d *Driver) addNode(ctx context.Context, state state, num int64) error {
 	var nodeResp common.NodeInfo
-	if isConsumerCloudMember == true && state.ClusterLabels["business"] != ""{
+	if isConsumerCloudMember == true && state.ClusterLabels["business"] != "" {
 		err := d.preCheck(ctx, state)
 		if err != nil {
 			return fmt.Errorf("Quota check failed")
@@ -534,7 +543,7 @@ func (d *Driver) addNode(ctx context.Context, state state, num int64)(error) {
 		Kind:       "Node",
 		ApiVersion: "v3",
 		MetaData: common.NodeMetaInfo{
-			Name: state.ClusterName,
+			Name:   state.ClusterName,
 			Labels: state.NodeConfig.NodeLabels,
 		},
 		Spec: common.NodeSpecInfo{
@@ -542,6 +551,10 @@ func (d *Driver) addNode(ctx context.Context, state state, num int64)(error) {
 			AvailableZone: state.NodeConfig.AvailableZone,
 			Login: common.NodeLogin{
 				SSHKey: state.NodeConfig.SSHName,
+				UserPassword: common.UserPassword{
+					UserName: state.NodeConfig.UserPassword.UserName,
+					Password: state.NodeConfig.UserPassword.Password,
+				},
 			},
 			RootVolume: common.NodeVolume{
 				Size:       state.NodeConfig.RootVolumeSize,
@@ -565,12 +578,12 @@ func (d *Driver) addNode(ctx context.Context, state state, num int64)(error) {
 					},
 				},
 			},
-			Count:       num,
-			BillingMode: state.NodeConfig.BillingMode,
+			Count:           num,
+			BillingMode:     state.NodeConfig.BillingMode,
 			OperationSystem: state.NodeConfig.NodeOperationSystem,
 			ExtendParam: common.ExtendParam{
-				BMSPeriodType: state.NodeConfig.ExtendParam.BMSPeriodType,
-				BMSPeriodNum: state.NodeConfig.ExtendParam.BMSPeriodNum,
+				BMSPeriodType:  state.NodeConfig.ExtendParam.BMSPeriodType,
+				BMSPeriodNum:   state.NodeConfig.ExtendParam.BMSPeriodNum,
 				BMSIsAutoRenew: state.NodeConfig.ExtendParam.BMSIsAutoRenew,
 			},
 		},
@@ -588,7 +601,7 @@ func (d *Driver) addNode(ctx context.Context, state state, num int64)(error) {
 
 	_, err = d.waitForReady(state, "node", "create")
 	if err != nil {
-		return  err
+		return err
 	}
 
 	logrus.Infof("Starting add node...")
@@ -596,12 +609,11 @@ func (d *Driver) addNode(ctx context.Context, state state, num int64)(error) {
 	return nil
 }
 
-func (d *Driver) deleteNode(ctx context.Context, state state, num int64)(error) {
+func (d *Driver) deleteNode(ctx context.Context, state state, num int64) error {
 
 	logrus.Infof("Starting delete node...")
 
-	nodes := &common.NodeListInfo{
-	}
+	nodes := &common.NodeListInfo{}
 
 	uri := "/api/v3/projects/" + state.ProjectID + "/clusters/" + state.ClusterID + "/nodes"
 
@@ -642,28 +654,28 @@ func (d *Driver) deleteResources(state state, source string) error {
 			logrus.Errorf("delete resource subnets err, %v", err)
 			return err
 		}
-		_, _  = d.waitForReady(state, "subnet", "delete")
+		_, _ = d.waitForReady(state, "subnet", "delete")
 
 		_, _, err = d.cceHTTPRequest(state, vpcUri, http.MethodDelete, common.ServiceVPC, nil)
 		if err != nil {
 			logrus.Errorf("delete resource vpcs err, %v", err)
 			return err
 		}
-		_, _  = d.waitForReady(state, "vpc", "delete")
+		_, _ = d.waitForReady(state, "vpc", "delete")
 	} else if source == "vpc" {
 		_, _, err := d.cceHTTPRequest(state, vpcUri, http.MethodDelete, common.ServiceVPC, nil)
 		if err != nil {
 			logrus.Errorf("delete resource vpcs err, %v", err)
 			return err
 		}
-		_, _  = d.waitForReady(state, "vpc", "delete")
+		_, _ = d.waitForReady(state, "vpc", "delete")
 	} else {
 		_, _, err := d.cceHTTPRequest(state, subnetUri, http.MethodDelete, common.ServiceVPC, nil)
 		if err != nil {
 			logrus.Errorf("delete resource subnets err, %v", err)
 			return err
 		}
-		_, _  = d.waitForReady(state, "subnet", "delete")
+		_, _ = d.waitForReady(state, "subnet", "delete")
 	}
 
 	return nil
@@ -675,7 +687,7 @@ func (d *Driver) preCheck(ctx context.Context, state state) error {
 	var b []byte
 	e := map[string]interface{}{
 		"businessName": state.ClusterLabels["business"],
-		"nodeCount": state.NodeConfig.NodeCount,
+		"nodeCount":    state.NodeConfig.NodeCount,
 	}
 
 	b, err := json.Marshal(e)
@@ -774,13 +786,13 @@ func (d *Driver) Create(ctx context.Context, options *types.DriverOptions, _ *ty
 
 		subnetReq := &common.SubnetInfo{
 			Subnet: common.Subnet{
-				Name: state.ClusterName + "-subnet",
-				Cidr: common.DefaultCidr,
-				GatewayIp: common.DefaultGateway,
-				VpcId: vpcResp.Vpc.Id,
-				PrimaryDns: "114.114.114.114",
+				Name:         state.ClusterName + "-subnet",
+				Cidr:         common.DefaultCidr,
+				GatewayIp:    common.DefaultGateway,
+				VpcId:        vpcResp.Vpc.Id,
+				PrimaryDns:   "114.114.114.114",
 				SecondaryDns: "8.8.8.8",
-				DhcpEnable: true,
+				DhcpEnable:   true,
 			},
 		}
 
@@ -808,22 +820,21 @@ func (d *Driver) Create(ctx context.Context, options *types.DriverOptions, _ *ty
 		}
 	}
 
-
 	logrus.Infof("Creating cce clusters...")
 	clusterReq := &common.ClusterInfo{
-		Kind: "cluster",
+		Kind:       "cluster",
 		ApiVersion: "v3",
 		MetaData: common.MetaInfo{
-			Name: state.ClusterName,
+			Name:   state.ClusterName,
 			Labels: state.ClusterLabels,
 		},
 		Spec: common.SpecInfo{
 			ClusterType: state.ClusterType,
-			Flavor: state.ClusterFlavor,
-			K8sVersion: state.ClusterVersion,
+			Flavor:      state.ClusterFlavor,
+			K8sVersion:  state.ClusterVersion,
 			HostNetwork: &common.NetworkInfo{
-				Vpc: state.VpcID,
-				Subnet: state.SubnetID,
+				Vpc:           state.VpcID,
+				Subnet:        state.SubnetID,
 				HighwaySubnet: state.HighwaySubnet,
 			},
 			ContainerNetwork: &common.ContainerNetworkInfo{
@@ -868,7 +879,7 @@ func (d *Driver) Create(ctx context.Context, options *types.DriverOptions, _ *ty
 			Kind:       "Node",
 			ApiVersion: "v3",
 			MetaData: common.NodeMetaInfo{
-				Name: state.ClusterName,
+				Name:   state.ClusterName,
 				Labels: state.NodeConfig.NodeLabels,
 			},
 			Spec: common.NodeSpecInfo{
@@ -876,6 +887,10 @@ func (d *Driver) Create(ctx context.Context, options *types.DriverOptions, _ *ty
 				AvailableZone: state.NodeConfig.AvailableZone,
 				Login: common.NodeLogin{
 					SSHKey: state.NodeConfig.SSHName,
+					UserPassword: common.UserPassword{
+						UserName: state.NodeConfig.UserPassword.UserName,
+						Password: state.NodeConfig.UserPassword.Password,
+					},
 				},
 				RootVolume: common.NodeVolume{
 					Size:       state.NodeConfig.RootVolumeSize,
@@ -899,12 +914,12 @@ func (d *Driver) Create(ctx context.Context, options *types.DriverOptions, _ *ty
 						},
 					},
 				},
-				Count:       state.NodeConfig.NodeCount,
-				BillingMode: state.NodeConfig.BillingMode,
+				Count:           state.NodeConfig.NodeCount,
+				BillingMode:     state.NodeConfig.BillingMode,
 				OperationSystem: state.NodeConfig.NodeOperationSystem,
 				ExtendParam: common.ExtendParam{
-					BMSPeriodType: state.NodeConfig.ExtendParam.BMSPeriodType,
-					BMSPeriodNum: state.NodeConfig.ExtendParam.BMSPeriodNum,
+					BMSPeriodType:  state.NodeConfig.ExtendParam.BMSPeriodType,
+					BMSPeriodNum:   state.NodeConfig.ExtendParam.BMSPeriodNum,
 					BMSIsAutoRenew: state.NodeConfig.ExtendParam.BMSIsAutoRenew,
 				},
 			},
@@ -996,15 +1011,14 @@ func (d *Driver) waitForReady(state state, serviceType string, opt string) (inte
 
 				_, code, _ := d.cceHTTPRequest(state, uri, http.MethodGet, common.ServiceCCE, nil)
 				if code == 404 {
-					logrus.Info("Delete subnet successfully")
+					logrus.Info("Delete cluster successfully")
 				}
 				statusCode = code
 			}
 			return nil, nil
 		}
 	case "node":
-		nodes := &common.NodeListInfo{
-		}
+		nodes := &common.NodeListInfo{}
 		if opt == "create" {
 			for status != "done" {
 				time.Sleep(30 * time.Second)
@@ -1188,14 +1202,14 @@ func (d *Driver) Update(ctx context.Context, info *types.ClusterInfo, opts *type
 	return info, storeState(info, state)
 }
 
-func getInternalIp(ep string) (string){
+func getInternalIp(ep string) string {
 	if ep == "" {
 		return ""
 	}
 	kv := strings.Split(ep, ":")
 	if len(kv) > 1 {
 		ip := strings.Split(kv[1], "//")
-		if len(ip) ==2 {
+		if len(ip) == 2 {
 			return ip[1]
 		}
 	}
@@ -1275,7 +1289,7 @@ func (d *Driver) PostCheck(ctx context.Context, info *types.ClusterInfo) (*types
 			return nil, fmt.Errorf("error parsing port info")
 		}
 		internalEndpoint := ""
-		for _, ep := range cluster.Status.Endpoints{
+		for _, ep := range cluster.Status.Endpoints {
 			if ep.Type == "Internal" {
 				internalEndpoint = ep.Url
 			}
@@ -1333,7 +1347,7 @@ func (d *Driver) PostCheck(ctx context.Context, info *types.ClusterInfo) (*types
 	if len(clusterCert.Clusters) == 1 {
 		info.Endpoint = clusterCert.Clusters[0].Cluster.Server
 	} else {
-		for _, cluster := range clusterCert.Clusters{
+		for _, cluster := range clusterCert.Clusters {
 			if cluster.Name == "externalCluster" {
 				info.Endpoint = cluster.Cluster.Server
 				break
@@ -1416,7 +1430,7 @@ func (d *Driver) Remove(ctx context.Context, info *types.ClusterInfo) error {
 	}
 
 	uri := "/api/v3/projects/" + state.ProjectID + "/clusters/" + state.ClusterID
-	_, _, err = d.cceHTTPRequest(state, uri, http.MethodDelete, common.ServiceCCE,nil)
+	_, _, err = d.cceHTTPRequest(state, uri, http.MethodDelete, common.ServiceCCE, nil)
 	if err != nil {
 		return fmt.Errorf("error deleting cluster: %v", err)
 	}
@@ -1427,4 +1441,3 @@ func (d *Driver) Remove(ctx context.Context, info *types.ClusterInfo) error {
 func (d *Driver) GetCapabilities(ctx context.Context) (*types.Capabilities, error) {
 	return &d.driverCapabilities, nil
 }
-

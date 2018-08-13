@@ -2,11 +2,11 @@ package drivers
 
 import (
 	"github.com/rancher/kontainer-engine/drivers/aks"
+	"github.com/rancher/kontainer-engine/drivers/cce"
 	"github.com/rancher/kontainer-engine/drivers/eks"
 	"github.com/rancher/kontainer-engine/drivers/gke"
 	"github.com/rancher/kontainer-engine/drivers/import"
 	"github.com/rancher/kontainer-engine/drivers/rke"
-	"github.com/rancher/kontainer-engine/drivers/cce"
 	"github.com/rancher/kontainer-engine/types"
 )
 
