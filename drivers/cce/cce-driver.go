@@ -566,18 +566,6 @@ func (d *Driver) addNode(ctx context.Context, state state, num int64) error {
 					VolumeType: state.NodeConfig.DataVolumeType,
 				},
 			},
-			PublicIP: common.PublicIP{
-				Ids:   state.NodeConfig.PublicIP.Ids,
-				Count: state.NodeConfig.PublicIP.Count,
-				Eip: common.Eip{
-					Iptype: state.NodeConfig.PublicIP.Eip.Iptype,
-					Bandwidth: common.Bandwidth{
-						ChargeMode: state.NodeConfig.PublicIP.Eip.Bandwidth.ChargeMode,
-						Size:       state.NodeConfig.PublicIP.Eip.Bandwidth.Size,
-						ShareType:  state.NodeConfig.PublicIP.Eip.Bandwidth.ShareType,
-					},
-				},
-			},
 			Count:           num,
 			BillingMode:     state.NodeConfig.BillingMode,
 			OperationSystem: state.NodeConfig.NodeOperationSystem,
