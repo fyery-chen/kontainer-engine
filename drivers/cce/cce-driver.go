@@ -1344,22 +1344,39 @@ func (d *Driver) PostCheck(ctx context.Context, info *types.ClusterInfo) (*types
 
 	info.Version = state.ClusterVersion
 	info.NodeCount = state.NodeConfig.NodeCount
-	if len(clusterCert.Clusters) == 1 {
-		info.Endpoint = clusterCert.Clusters[0].Cluster.Server
-	} else {
-		for _, cluster := range clusterCert.Clusters {
-			if cluster.Name == "externalCluster" {
-				info.Endpoint = cluster.Cluster.Server
-				break
-			}
+	//if len(clusterCert.Clusters) == 1 {
+	//	info.Endpoint = clusterCert.Clusters[0].Cluster.Server
+	//} else {
+	//	for _, cluster := range clusterCert.Clusters {
+	//		if cluster.Name == "externalCluster" {
+	//			info.Endpoint = cluster.Cluster.Server
+	//			break
+	//		}
+	//	}
+	//}
+	internalServer := ""
+
+	for _, cluster := range clusterCert.Clusters {
+		//if cluster.Name == "externalCluster" {
+		//	externalServer = cluster.Cluster.Server
+		//}
+		if cluster.Name == "internalCluster" {
+			internalServer = cluster.Cluster.Server
+			info.RootCaCertificate = cluster.Cluster.CertificateAuthorityData
 		}
 	}
+	//if externalServer != "" {
+	//	info.Endpoint = externalServer
+	//} else {
+	//	info.Endpoint = internalServer
+	//}
+	info.Endpoint = internalServer
 
 	info.Status = cluster.Status.Phase
 	info.ClientKey = clusterCert.Users[0].User.ClientKeyData
 	info.ClientCertificate = clusterCert.Users[0].User.ClientCertificateData
 	info.Username = clusterCert.Users[0].Name
-	info.RootCaCertificate = clusterCert.Clusters[0].Cluster.CertificateAuthorityData
+	//info.RootCaCertificate = clusterCert.Clusters[0].Cluster.CertificateAuthorityData
 
 	capem, err := base64.StdEncoding.DecodeString(info.RootCaCertificate)
 	if err != nil {
@@ -1376,7 +1393,7 @@ func (d *Driver) PostCheck(ctx context.Context, info *types.ClusterInfo) (*types
 		return nil, fmt.Errorf("failed to decode client cert: %v", err)
 	}
 
-	host := info.Endpoint
+	host := internalServer
 	if !strings.HasPrefix(host, "https://") {
 		host = fmt.Sprintf("https://%s", host)
 	}
