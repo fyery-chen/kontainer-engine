@@ -543,7 +543,6 @@ func (d *Driver) addNode(ctx context.Context, state state, num int64) error {
 		Kind:       "Node",
 		ApiVersion: "v3",
 		MetaData: common.NodeMetaInfo{
-			Name:   state.ClusterName,
 			Labels: state.NodeConfig.NodeLabels,
 		},
 		Spec: common.NodeSpecInfo{
@@ -813,7 +812,7 @@ func (d *Driver) Create(ctx context.Context, options *types.DriverOptions, _ *ty
 		Kind:       "cluster",
 		ApiVersion: "v3",
 		MetaData: common.MetaInfo{
-			Name:   state.ClusterName,
+			Name:   state.DisplayName,
 			Labels: state.ClusterLabels,
 		},
 		Spec: common.SpecInfo{
@@ -867,7 +866,6 @@ func (d *Driver) Create(ctx context.Context, options *types.DriverOptions, _ *ty
 			Kind:       "Node",
 			ApiVersion: "v3",
 			MetaData: common.NodeMetaInfo{
-				Name:   state.ClusterName,
 				Labels: state.NodeConfig.NodeLabels,
 			},
 			Spec: common.NodeSpecInfo{
@@ -1171,17 +1169,33 @@ func (d *Driver) Update(ctx context.Context, info *types.ClusterInfo, opts *type
 	}
 	newState.ClusterID = state.ClusterID
 
-	if newState.NodeConfig.NodeCount > state.NodeConfig.NodeCount {
-		addNodeCount := newState.NodeConfig.NodeCount - state.NodeConfig.NodeCount
+	nodes := &common.NodeListInfo{}
+	//When rancher restart, this maybe do again, so check
+	uri := "/api/v3/projects/" + state.ProjectID + "/clusters/" + state.ClusterID + "/nodes"
+
+	resp, _, err := d.cceHTTPRequest(state, uri, http.MethodGet, common.ServiceCCE, nil)
+	if err != nil {
+		return info, fmt.Errorf("error getting cluster info: %v", err)
+	}
+
+	err = json.Unmarshal(resp, nodes)
+	if err != nil {
+		logrus.Infof("error parsing cluster info: %v", err)
+		return info, fmt.Errorf("error parsing cluster info: %v", err)
+	}
+
+	existedNodeNum := int64(len(nodes.Items))
+	if newState.NodeConfig.NodeCount > existedNodeNum {
+		addNodeCount := newState.NodeConfig.NodeCount - existedNodeNum
 		err = d.addNode(ctx, newState, addNodeCount)
 		if err != nil {
-			return nil, fmt.Errorf("error adding cluster: %v", err)
+			return info, fmt.Errorf("error adding cluster: %v", err)
 		}
-	} else if newState.NodeConfig.NodeCount < state.NodeConfig.NodeCount {
-		deleteNodeCount := state.NodeConfig.NodeCount - newState.NodeConfig.NodeCount
+	} else if newState.NodeConfig.NodeCount < existedNodeNum {
+		deleteNodeCount := existedNodeNum - newState.NodeConfig.NodeCount
 		err = d.deleteNode(ctx, newState, deleteNodeCount)
 		if err != nil {
-			return nil, fmt.Errorf("error deleting cluster: %v", err)
+			return info, fmt.Errorf("error deleting cluster: %v", err)
 		}
 	}
 
