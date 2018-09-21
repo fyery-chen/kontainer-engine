@@ -927,8 +927,8 @@ func (d *Driver) Create(ctx context.Context, options *types.DriverOptions, _ *ty
 				if err != nil {
 					return nil, err
 				}
+				return nil, fmt.Errorf("error creating node: %v", err)
 			}
-			return nil, fmt.Errorf("error creating node: %v", err)
 		}
 
 		if err := json.Unmarshal(resp, &nodeResp); err != nil {
