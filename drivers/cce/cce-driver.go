@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -490,10 +491,19 @@ func (d *Driver) cceHTTPRequest(state state, uri, method, serviceType string, ar
 	logrus.Infof("request authorization header after signature: %v", req.Header.Get("authorization"))
 	logrus.Infof("request is: %v", req)
 
+	timeout := 30
+	cceRequestTimeout := os.Getenv("CCE_REQUEST_TIMEOUT")
+	if cceRequestTimeout != "" {
+		timeout, err = strconv.Atoi(cceRequestTimeout)
+		if err != nil || timeout <= 0 {
+			timeout = 30
+		}
+	}
+
 	defaultTransport := &http.Transport{
 		Dial: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
+			Timeout:   time.Duration(timeout) * time.Second,
+			KeepAlive: time.Duration(timeout) * time.Second,
 		}).Dial,
 		TLSHandshakeTimeout: 10 * time.Second,
 	}
