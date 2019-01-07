@@ -494,6 +494,9 @@ func getStateFromOpts(driverOptions *types.DriverOptions) (state, error) {
 
 	// Configuration of MasterAuth
 	d.MasterAuth.Username = options.GetValueFromDriverOptions(driverOptions, types.StringType, "master-auth-username", "masterAuthUsername").(string)
+	if d.MasterAuth.Username == "" {
+		d.MasterAuth.Username = "admin"
+	}
 	d.MasterAuth.Password = options.GetValueFromDriverOptions(driverOptions, types.StringType, "master-auth-password", "masterAuthPassword").(string)
 	d.MasterAuth.ClientCertificateConfig.IssueClientCertificate = options.GetValueFromDriverOptions(driverOptions, types.BoolType, "issue-client-certificate", "issueClientCertificate").(bool)
 
@@ -694,6 +697,7 @@ func (d *Driver) generateClusterCreateRequest(state state) *raw.CreateClusterReq
 	request.Cluster.InitialClusterVersion = state.MasterVersion
 	request.Cluster.Description = state.Description
 	request.Cluster.EnableKubernetesAlpha = state.EnableAlphaFeature
+	request.Cluster.ClusterIpv4Cidr = state.ClusterIpv4Cidr
 
 	disableHTTPLoadBalancing := state.EnableHTTPLoadBalancing != nil && !*state.EnableHTTPLoadBalancing
 	disableHorizontalPodAutoscaling := state.EnableHorizontalPodAutoscaling != nil && !*state.EnableHorizontalPodAutoscaling
@@ -710,9 +714,7 @@ func (d *Driver) generateClusterCreateRequest(state state) *raw.CreateClusterReq
 	request.Cluster.LegacyAbac = &raw.LegacyAbac{
 		Enabled: state.LegacyAbac,
 	}
-	request.Cluster.MasterAuth = &raw.MasterAuth{
-		Username: "admin",
-	}
+	request.Cluster.MasterAuth = state.MasterAuth
 	request.Cluster.NodePools = append(request.Cluster.NodePools, state.NodePool)
 
 	state.ResourceLabels["display-name"] = strings.ToLower(state.DisplayName)
@@ -726,7 +728,7 @@ func (d *Driver) generateClusterCreateRequest(state state) *raw.CreateClusterReq
 	request.Cluster.IpAllocationPolicy = state.IPAllocationPolicy
 	if request.Cluster.IpAllocationPolicy.UseIpAliases == true &&
 		request.Cluster.IpAllocationPolicy.ClusterIpv4CidrBlock != "" {
-		request.Cluster.ClusterIpv4Cidr = state.ClusterIpv4Cidr
+		request.Cluster.ClusterIpv4Cidr = ""
 	}
 
 	// Stackdriver logging and monitoring default to "on" if no parameter is
